@@ -1,4 +1,5 @@
 require([], function () {
+  function *mapgen() {
     let canvas = document.getElementById('main-canvas');
     let newCanvas = document.getElementById('secondary-canvas');
 
@@ -134,4 +135,13 @@ require([], function () {
     }
 
     displayMap(map, canvas.getContext('2d'));
+	yield map; // final yield
+  }
+  // animation loop
+  let it = mapgen();
+  window.setInterval(draw, 1);
+  function draw() {
+      it.next();
+  }
+
 });
