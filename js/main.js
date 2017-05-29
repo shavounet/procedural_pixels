@@ -1,4 +1,5 @@
 require([], function () {
+  function *mapgen() {
     let canvas = document.getElementById('main-canvas');
     let newCanvas = document.getElementById('secondary-canvas');
 
@@ -23,6 +24,9 @@ require([], function () {
     }
 
     let map = createMap(-200);
+
+	displayMap(map, canvas.getContext('2d'));
+	yield map; // pause for animation
 
     // Height addition method
     const heightVariance = 0.05;
@@ -64,6 +68,12 @@ require([], function () {
         let radius = Math.ceil(70 * randomFactor);
 
         addHeight(map, heightIncr, radius, x, y);
+
+		// draw canvas every 100 'frames'
+		if( (n % 100) === 0 ) {
+			displayMap(map, canvas.getContext('2d'));
+			yield map; // pause for animation
+		}
     }
 
     // Smooth height map
@@ -89,6 +99,9 @@ require([], function () {
         });
     });
     map = newMap;
+
+	displayMap(map, canvas.getContext('2d'));
+	yield map; // pause for animation
 
     // Display map
     function displayMap(map, ctx) {
@@ -134,4 +147,13 @@ require([], function () {
     }
 
     displayMap(map, canvas.getContext('2d'));
+	yield map; // final yield
+  }
+  // animation loop
+  let it = mapgen();
+  window.setInterval(draw, 1);
+  function draw() {
+      it.next();
+  }
+
 });
