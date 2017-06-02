@@ -1,14 +1,18 @@
 require(['map'], function (Map) {
     let canvas = document.getElementById('main-canvas');
     let newCanvas = document.getElementById('secondary-canvas');
+    let shadowTmpCanvas = document.createElement('canvas');
 
     canvas.width = window.innerWidth - 10;
     canvas.height = window.innerHeight - 10;
     newCanvas.width = canvas.width;
     newCanvas.height = canvas.height;
+    shadowTmpCanvas.width = canvas.width;
+    shadowTmpCanvas.height = canvas.height;
 
     const width = Math.ceil(canvas.width);
     const height = Math.ceil(canvas.height);
+    const border = 100;
 
     console.log('Width', width, 'Height', height);
 
@@ -27,10 +31,7 @@ require(['map'], function (Map) {
         return Math.random() * centerFactor * xFactor * yFactor;
     }
 
-    // Pop height everywhere
-    let border = 100;
-    console.log('Starting to add height everywhere', window.performance.now());
-    for (let n = 0; n < 10000; n++) {
+    function applyRandomHeight() {
         let x = Math.floor((width - border * 2) * Math.random() + border);
         let y = Math.floor((height - border * 2) * Math.random() + border);
 
@@ -39,22 +40,20 @@ require(['map'], function (Map) {
         let heightIncr = Math.ceil(10 * randomFactor);
         let radius = Math.ceil(70 * randomFactor);
 
-        map.addPyramidalHeight(heightIncr, radius, x, y);
-    }
-    console.log('Added height everywhere', window.performance.now());
+        console.log("applying", heightIncr, radius, x, y);
 
-    // Smooth height map
-    console.log('Starting smoothing', window.performance.now());
-    map.smooth(10);
-    console.log('Smoothing done', window.performance.now());
+        map.addPyramidalHeight(heightIncr, radius, x, y);
+
+        return [x - radius, y - radius, x + radius, y + radius];
+    }
 
     // Display map
-    function displayMap(map, ctx) {
-        let biomeImage = ctx.createImageData(width, height);
-        let shadowImage = ctx.createImageData(width, height);
+    function displayMap(map, ctx, updateRect) {
+        console.log("drawing", updateRect);
+        let biomeImage, shadowImage;
 
-        map.forEach(function (heightValue, x, y) {
-            let currentIndex = (x + y * width) * 4;
+        function updatePixel(x, y, dx, dy) {
+            let currentIndex = (x - dx + (y - dy) * biomeImage.width) * 4;
 
             // Biome color - see https://developer.mozilla.org/en-US/docs/Web/CSS/color_value
             let biomeColor = map.getBiomeColor(x, y);
@@ -63,19 +62,45 @@ require(['map'], function (Map) {
 
             // Shadows
             shadowImage.data[currentIndex + 3] = map.getShadowAlpha(x, y);
-        });
+        }
 
-        ctx.putImageData(biomeImage, 0, 0);
+        if (!updateRect) {
+            biomeImage = ctx.createImageData(width, height);
+            shadowImage = ctx.createImageData(width, height);
 
-        // Use a temporary canvas to draw shadows (will not work using putImageData : https://stackoverflow.com/a/5292658)
-        let shadowTmpCanvas = document.createElement('canvas');
-        shadowTmpCanvas.width = width;
-        shadowTmpCanvas.height = height;
-        shadowTmpCanvas.getContext('2d').putImageData(shadowImage, 0, 0);
-        ctx.drawImage(shadowTmpCanvas, 0, 0);
+            map.forEach((heightValue, x, y) => updatePixel(x, y, 0, 0));
+
+            ctx.putImageData(biomeImage, 0, 0);
+
+            // Use a temporary canvas to draw shadows (will not work using putImageData : https://stackoverflow.com/a/5292658)
+            shadowTmpCanvas.getContext('2d').putImageData(shadowImage, 0, 0);
+            ctx.drawImage(shadowTmpCanvas, 0, 0);
+        } else if ((updateRect[2] > updateRect[0]) && (updateRect[3] > updateRect[1])) {
+            biomeImage = ctx.createImageData(updateRect[2] - updateRect[0], updateRect[3] - updateRect[1]);
+            shadowImage = ctx.createImageData(biomeImage);
+
+            for (let i = updateRect[0]; i < updateRect[2]; i++) {
+                for (let j = updateRect[1]; j < updateRect[3]; j++) {
+                    updatePixel(i, j, updateRect[0], updateRect[1]);
+                }
+            }
+
+            ctx.putImageData(biomeImage, updateRect[0], updateRect[1]);
+
+            // Use a temporary canvas to draw shadows (will not work using putImageData : https://stackoverflow.com/a/5292658)
+            shadowTmpCanvas.getContext('2d').putImageData(shadowImage, 0, 0);
+            ctx.drawImage(shadowTmpCanvas, 0, 0, shadowImage.width, shadowImage.height, updateRect[0], updateRect[1], shadowImage.width, shadowImage.height);
+        }
     }
 
-    console.log('Compute rendering', window.performance.now());
+    function mainLoop() {
+        let updatedRect = applyRandomHeight();
+        //map.smooth(1);
+        displayMap(map, canvas.getContext('2d'), updatedRect);
+
+        window.requestAnimationFrame(mainLoop);
+    }
+
     displayMap(map, canvas.getContext('2d'));
-    console.log('Map rendered !', window.performance.now());
+    mainLoop();
 });
