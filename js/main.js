@@ -1,4 +1,4 @@
-require([], function () {
+require(['map'], function (Map) {
     let canvas = document.getElementById('main-canvas');
     let newCanvas = document.getElementById('secondary-canvas');
 
@@ -12,33 +12,8 @@ require([], function () {
 
     console.log('Width', width, 'Height', height);
 
-    // Create object
-    function createMap(defaultValue) {
-        let map = [];
-        let flatValues = new Array(height).fill(defaultValue);
-        for (let i = 0; i < width; i++) {
-            map.push(flatValues.slice());
-        }
-        return map;
-    }
+    let map = Map.create(width, height);
 
-    let map = createMap(-200);
-
-    // Height addition method
-    const heightVariance = 0.05;
-
-    function addHeight(map, height, radius, x, y) {
-        if (height > 0 && radius > 0) {
-            for (let i = x - radius; i < x + radius; i++) {
-                for (let j = y - radius; j < y + radius; j++) {
-                    if (map[i] !== undefined && map[i][j] !== undefined) {
-                        map[i][j] += Math.round(height * (1 + 2 * (Math.random() - 0.5) * heightVariance));
-                    }
-                }
-            }
-            addHeight(map, Math.round(height * 0.8), radius - 1, x, y);
-        }
-    }
 
     // Allow to change the shape
     function customRandom(x, y) {
@@ -64,34 +39,13 @@ require([], function () {
         let heightIncr = Math.ceil(10 * randomFactor);
         let radius = Math.ceil(70 * randomFactor);
 
-        addHeight(map, heightIncr, radius, x, y);
+        map.addPyramidalHeight(heightIncr, radius, x, y);
     }
     console.log('Added height everywhere', window.performance.now());
 
     // Smooth height map
-    let newMap = createMap(0);
-    let averageRadius = 10;
     console.log('Starting smoothing', window.performance.now());
-    map.forEach(function (mapColumn, x) {
-        mapColumn.forEach(function (heightValue, y) {
-            if (heightValue > -30) {
-                let accumulator = 0;
-                let size = 0;
-                for (let i = x - averageRadius; i <= x + averageRadius; i++) {
-                    for (let j = y - averageRadius; j <= y + averageRadius; j++) {
-                        if (map[i] !== undefined && map[i][j] !== undefined) {
-                            accumulator += map[i][j];
-                            size++;
-                        }
-                    }
-                }
-                newMap[x][y] = Math.floor(accumulator / size);
-            } else {
-                newMap[x][y] = map[x][y];
-            }
-        });
-    });
-    map = newMap;
+    map.smooth(10);
     console.log('Smoothing done', window.performance.now());
 
     // Display map
@@ -99,54 +53,16 @@ require([], function () {
         let biomeImage = ctx.createImageData(width, height);
         let shadowImage = ctx.createImageData(width, height);
 
-        map.forEach(function (mapColumn, x) {
-            mapColumn.forEach(function (heightValue, y) {
-                let currentIndex = (x + y * width) * 4;
+        map.forEach(function (heightValue, x, y) {
+            let currentIndex = (x + y * width) * 4;
 
-                // Biome color - see https://developer.mozilla.org/en-US/docs/Web/CSS/color_value
-                let biomeColor = [];
-                if (heightValue < -20) {
-                    // Blue
-                    biomeColor = [0, 0, 255];
-                } else if (-20 <= heightValue && heightValue < 0) {
-                    // cornflowerblue
-                    biomeColor = [100, 149, 237];
-                } else if (0 <= heightValue && heightValue < 10) {
-                    // yellow
-                    biomeColor = [255, 255, 0];
-                } else if (10 <= heightValue && heightValue < 20) {
-                    // sandybrown
-                    biomeColor = [244, 164, 96];
-                } else if (20 <= heightValue && heightValue < 200) {
-                    // forestgreen
-                    biomeColor = [34, 139, 34];
-                } else if (200 <= heightValue && heightValue < 500) {
-                    // green
-                    biomeColor = [0, 128, 0];
-                } else if (500 <= heightValue && heightValue < 600) {
-                    // seagreen
-                    biomeColor = [46, 139, 87];
-                } else if (600 <= heightValue && heightValue < 750) {
-                    // silver
-                    biomeColor = [192, 192, 192];
-                } else if (750 <= heightValue) {
-                    // white
-                    biomeColor = [255, 255, 255];
-                }
-                biomeColor.forEach((value, i) => biomeImage.data[currentIndex + i] = value);
-                biomeImage.data[currentIndex + 3] = 255;
+            // Biome color - see https://developer.mozilla.org/en-US/docs/Web/CSS/color_value
+            let biomeColor = map.getBiomeColor(x, y);
+            biomeColor.forEach((value, i) => biomeImage.data[currentIndex + i] = value);
+            biomeImage.data[currentIndex + 3] = 255;
 
-                // Shadows
-                if (heightValue > 0 && map[x - 1] !== undefined && map[x - 1][y] > map[x][y]) {
-                    shadowImage.data[currentIndex + 3] += 10;
-                }
-                if (heightValue > 0 && map[x][y - 1] !== undefined && map[x][y - 1] > map[x][y]) {
-                    shadowImage.data[currentIndex + 3] += 10;
-                }
-                if (heightValue > 0 && map[x - 1] !== undefined && map[x - 1][y - 1] !== undefined && map[x - 1][y - 1] > map[x][y]) {
-                    shadowImage.data[currentIndex + 3] += 10;
-                }
-            })
+            // Shadows
+            shadowImage.data[currentIndex + 3] = map.getShadowAlpha(x, y);
         });
 
         ctx.putImageData(biomeImage, 0, 0);
