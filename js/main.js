@@ -54,6 +54,7 @@ require([], function () {
 
     // Pop height everywhere
     let border = 100;
+    console.log('Starting to add height everywhere', window.performance.now());
     for (let n = 0; n < 10000; n++) {
         let x = Math.floor((width - border * 2) * Math.random() + border);
         let y = Math.floor((height - border * 2) * Math.random() + border);
@@ -65,10 +66,12 @@ require([], function () {
 
         addHeight(map, heightIncr, radius, x, y);
     }
+    console.log('Added height everywhere', window.performance.now());
 
     // Smooth height map
     let newMap = createMap(0);
     let averageRadius = 10;
+    console.log('Starting smoothing', window.performance.now());
     map.forEach(function (mapColumn, x) {
         mapColumn.forEach(function (heightValue, y) {
             if (heightValue > -30) {
@@ -89,49 +92,74 @@ require([], function () {
         });
     });
     map = newMap;
+    console.log('Smoothing done', window.performance.now());
 
     // Display map
     function displayMap(map, ctx) {
+        let biomeImage = ctx.createImageData(width, height);
+        let shadowImage = ctx.createImageData(width, height);
+
         map.forEach(function (mapColumn, x) {
             mapColumn.forEach(function (heightValue, y) {
-                // Biome color
+                let currentIndex = (x + y * width) * 4;
+
+                // Biome color - see https://developer.mozilla.org/en-US/docs/Web/CSS/color_value
+                let biomeColor = [];
                 if (heightValue < -20) {
-                    ctx.fillStyle = 'blue';
+                    // Blue
+                    biomeColor = [0, 0, 255];
                 } else if (-20 <= heightValue && heightValue < 0) {
-                    ctx.fillStyle = 'cornflowerblue';
+                    // cornflowerblue
+                    biomeColor = [100, 149, 237];
                 } else if (0 <= heightValue && heightValue < 10) {
-                    ctx.fillStyle = 'yellow';
+                    // yellow
+                    biomeColor = [255, 255, 0];
                 } else if (10 <= heightValue && heightValue < 20) {
-                    ctx.fillStyle = 'sandybrown';
+                    // sandybrown
+                    biomeColor = [244, 164, 96];
                 } else if (20 <= heightValue && heightValue < 200) {
-                    ctx.fillStyle = 'forestgreen';
+                    // forestgreen
+                    biomeColor = [34, 139, 34];
                 } else if (200 <= heightValue && heightValue < 500) {
-                    ctx.fillStyle = 'green';
+                    // green
+                    biomeColor = [0, 128, 0];
                 } else if (500 <= heightValue && heightValue < 600) {
-                    ctx.fillStyle = 'seagreen';
+                    // seagreen
+                    biomeColor = [46, 139, 87];
                 } else if (600 <= heightValue && heightValue < 750) {
-                    ctx.fillStyle = 'silver';
+                    // silver
+                    biomeColor = [192, 192, 192];
                 } else if (750 <= heightValue) {
-                    ctx.fillStyle = 'white';
+                    // white
+                    biomeColor = [255, 255, 255];
                 }
-                ctx.fillRect(x, y, 1, 1);
+                biomeColor.forEach((value, i) => biomeImage.data[currentIndex + i] = value);
+                biomeImage.data[currentIndex + 3] = 255;
 
                 // Shadows
                 if (heightValue > 0 && map[x - 1] !== undefined && map[x - 1][y] > map[x][y]) {
-                    ctx.fillStyle = 'rgba(0,0,0,0.05)';
-                    ctx.fillRect(x, y, 1, 1);
+                    shadowImage.data[currentIndex + 3] += 10;
                 }
                 if (heightValue > 0 && map[x][y - 1] !== undefined && map[x][y - 1] > map[x][y]) {
-                    ctx.fillStyle = 'rgba(0,0,0,0.05)';
-                    ctx.fillRect(x, y, 1, 1);
+                    shadowImage.data[currentIndex + 3] += 10;
                 }
                 if (heightValue > 0 && map[x - 1] !== undefined && map[x - 1][y - 1] !== undefined && map[x - 1][y - 1] > map[x][y]) {
-                    ctx.fillStyle = 'rgba(0,0,0,0.05)';
-                    ctx.fillRect(x, y, 1, 1);
+                    shadowImage.data[currentIndex + 3] += 10;
                 }
             })
         });
+
+        ctx.putImageData(biomeImage, 0, 0);
+
+        // Use a temporary canvas to draw shadows (will not work using putImageData : https://stackoverflow.com/a/5292658)
+        let shadowTmpCanvas = document.createElement('canvas');
+        shadowTmpCanvas.width = width;
+        shadowTmpCanvas.height = height;
+        shadowTmpCanvas.getContext('2d').putImageData(shadowImage, 0, 0);
+        ctx.drawImage(shadowTmpCanvas, 0, 0);
     }
 
+    console.log('Compute rendering', window.performance.now());
     displayMap(map, canvas.getContext('2d'));
+    console.log('Map rendered !', window.performance.now());
 });
